@@ -1194,8 +1194,8 @@ ulong cli_safe_read_with_ok_complete(MYSQL *mysql, bool parse_ok,
 #ifndef NDEBUG
     char desc[VIO_DESCRIPTION_SIZE]{"n/a"};
     if (net->vio) vio_description(net->vio, desc);
-    DBUG_PRINT("error",
-               ("Wrong connection or packet. fd: %s  len: %lu", desc, len));
+    DBUG_PRINT("zendbg",
+               ("cli_safe_read_with_ok_complete: Wrong connection or packet. fd: %s  len: %lu  socket_errno: %d", desc, len, socket_errno));
 #endif  // NDEBUG
 #ifdef MYSQL_SERVER
     if (net->vio && (net->last_errno == ER_NET_READ_INTERRUPTED))
@@ -1328,6 +1328,7 @@ bool cli_advanced_command(MYSQL *mysql, enum enum_server_command command,
 
   if (mysql->net.vio == nullptr || net->error == NET_ERROR_SOCKET_UNUSABLE) {
     /* Do reconnect if possible */
+    DBUG_PRINT("zendbg", ("cli_advanced_command: socket unusable"));
     if (!mysql->reconnect || mysql_reconnect(mysql) || stmt_skip) {
       set_mysql_error(mysql, CR_SERVER_LOST, unknown_sqlstate);
       return true; /* reconnect == false OR reconnect failed */
@@ -1372,13 +1373,15 @@ bool cli_advanced_command(MYSQL *mysql, enum enum_server_command command,
     connection gets killed after this check but before command is sent to
     server. But this should be rare.
   */
-  if ((command != COM_QUIT) && mysql->reconnect && !vio_is_connected(net->vio))
+  if ((command != COM_QUIT) && mysql->reconnect && !vio_is_connected(net->vio)) {
     net->error = NET_ERROR_SOCKET_UNUSABLE;
+    DBUG_PRINT("zendbg", ("marking socket as NET_ERROR_SOCKET_UNUSABLE becuase not vio_is_connected (socket_errno: %d)", socket_errno));
+  }
 
   if (net_write_command(net, (uchar)command, header, header_length, arg,
                         arg_length)) {
-    DBUG_PRINT("error",
-               ("Can't send command to server. Error: %d", socket_errno));
+    DBUG_PRINT("zendbg",
+               ("cli_advanced_command: Can't send command to server. net->last_errno: %d, socket_errno: %d", net->last_errno, socket_errno));
     if (net->last_errno == ER_NET_PACKET_TOO_LARGE) {
       set_mysql_error(mysql, CR_NET_PACKET_TOO_LARGE, unknown_sqlstate);
       goto end;
@@ -1408,6 +1411,8 @@ bool cli_advanced_command(MYSQL *mysql, enum enum_server_command command,
                 (command, header_length, arg_length, header, arg));
     if (net_write_command(net, (uchar)command, header, header_length, arg,
                           arg_length)) {
+      DBUG_PRINT("zendbg",
+               ("cli_advanced_command: attempt to re-send command failed. Error: %d", socket_errno));
       set_mysql_error(mysql, CR_SERVER_GONE_ERROR, unknown_sqlstate);
       goto end;
     }
@@ -7121,6 +7126,7 @@ bool mysql_reconnect(MYSQL *mysql) {
     mysql->server_status &= ~SERVER_STATUS_IN_TRANS;
     if (mysql->net.last_errno == 0)
       set_mysql_error(mysql, CR_SERVER_LOST, unknown_sqlstate);
+    DBUG_PRINT("zendbg", ("mysql_reconnect: reconnect requested but refusing due to SERVER_STATUS_IN_TRANS"));
     return true;
   }
   mysql_init(&tmp_mysql);
@@ -7142,6 +7148,7 @@ bool mysql_reconnect(MYSQL *mysql) {
     mysql->net.last_errno = tmp_mysql.net.last_errno;
     my_stpcpy(mysql->net.last_error, tmp_mysql.net.last_error);
     my_stpcpy(mysql->net.sqlstate, tmp_mysql.net.sqlstate);
+    DBUG_PRINT("zendbg", ("mysql_reconnect: reconnect requested but failed due to error %d", tmp_mysql.net.last_errno));
     return true;
   }
   if (mysql_set_character_set(&tmp_mysql, mysql->charset->csname)) {
@@ -7154,10 +7161,11 @@ bool mysql_reconnect(MYSQL *mysql) {
     mysql->net.last_errno = tmp_mysql.net.last_errno;
     my_stpcpy(mysql->net.last_error, tmp_mysql.net.last_error);
     my_stpcpy(mysql->net.sqlstate, tmp_mysql.net.sqlstate);
+    DBUG_PRINT("zendbg", ("mysql_reconnect: reconnect requested but failed during mysql_set_character_set due to error %d", tmp_mysql.net.last_errno));
     return true;
   }
 
-  DBUG_PRINT("info", ("reconnect succeded"));
+  DBUG_PRINT("zendbg", ("mysql_reconnect: reconnect succeded"));
   tmp_mysql.reconnect = true;
   tmp_mysql.free_me = mysql->free_me;
 
@@ -7791,6 +7799,7 @@ static int mysql_prepare_com_query_parameters(MYSQL *mysql,
     }
 
     if (mysql->net.vio == nullptr) { /* Do reconnect if possible */
+      DBUG_PRINT("zendbg", ("mysql_prepare_com_query_parameters: network failure; socket_errno: %d", socket_errno));
       if (!mysql->reconnect) {
         set_mysql_error(mysql, CR_SERVER_LOST, unknown_sqlstate);
         return 1;

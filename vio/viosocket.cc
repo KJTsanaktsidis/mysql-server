@@ -883,6 +883,7 @@ int vio_io_wait(Vio *vio, enum enum_vio_io_event event, int timeout) {
   switch (ret) {
     case -1:
       /* On error, -1 is returned. */
+      DBUG_PRINT("zendbg", ("vio_io_wait: polling failed with error %d", socket_errno));
       break;
     case 0:
       /*
@@ -890,6 +891,9 @@ int vio_io_wait(Vio *vio, enum enum_vio_io_event event, int timeout) {
         (This is not compiled in on WIN32.)
       */
       errno = SOCKET_ETIMEDOUT;
+      if (timeout > 0) {
+        DBUG_PRINT("zendbg", ("vio_io_wait: polling timed out"));
+      }
       break;
     default:
       /* Ensure that the requested I/O event has completed. */

@@ -134,15 +134,15 @@ static void report_errors(SSL *ssl) {
 #else  /* OPENSSL_VERSION_NUMBER >= 0x30000000L */
   while ((l = ERR_get_error_line_data(&file, &line, &data, &flags))) {
 #endif /* OPENSSL_VERSION_NUMBER >= 0x30000000L */
-    DBUG_PRINT("error", ("OpenSSL: %s:%s:%d:%s\n", ERR_error_string(l, buf),
+    DBUG_PRINT("zendbg", ("OpenSSL: %s:%s:%d:%s\n", ERR_error_string(l, buf),
                          file, line, (flags & ERR_TXT_STRING) ? data : ""));
   }
 
   if (ssl)
-    DBUG_PRINT("error",
+    DBUG_PRINT("zendbg",
                ("error: %s", ERR_error_string(SSL_get_error(ssl, l), buf)));
 
-  DBUG_PRINT("info", ("socket_errno: %d", socket_errno));
+  DBUG_PRINT("zendbg", ("socket_errno: %d", socket_errno));
 }
 
 #endif
@@ -279,6 +279,9 @@ size_t vio_ssl_read(Vio *vio, uchar *buf, size_t size) {
     ret = SSL_read(ssl, buf, (int)size);
 
     if (ret > 0) break;
+    if (socket_errno != EAGAIN) {
+      DBUG_PRINT("zendbg", ("SSL_read error in vio_ssl_read; ret %d errno %d", ret, socket_errno));
+    }
 
     /* Process the SSL I/O error. */
     if (!ssl_should_retry(vio, ret, &event, &ssl_errno_not_used)) break;
@@ -321,6 +324,9 @@ size_t vio_ssl_write(Vio *vio, const uchar *buf, size_t size) {
     ret = SSL_write(ssl, buf, (int)size);
 
     if (ret > 0) break;
+    if (socket_errno != EAGAIN) {
+      DBUG_PRINT("zendbg", ("SSL_write error in vio_ssl_write; ret %d errno %d", ret, socket_errno));
+    }
 
     /* Process the SSL I/O error. */
     if (!ssl_should_retry(vio, ret, &event, &ssl_errno_not_used)) break;
@@ -443,6 +449,10 @@ static size_t ssl_handshake_loop(Vio *vio, SSL *ssl, ssl_handshake_func_t func,
     if (handshake_ret >= 1) {
       ret = 0;
       break;
+    }
+
+    if (socket_errno != EAGAIN) {
+      DBUG_PRINT("zendbg", ("error in ssl_handshake_loop; ret %d errno %d", handshake_ret, socket_errno));
     }
 
     /* Process the SSL I/O error. */
