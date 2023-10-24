@@ -33,6 +33,8 @@
 */
 
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <new>
 
 #include "my_compiler.h"
@@ -391,6 +393,9 @@ bool vio_reset(Vio *vio, enum enum_vio_type type, my_socket sd,
     */
     if (sd != mysql_socket_getfd(vio->mysql_socket)) {
       if (vio->inactive == false) vio->vioshutdown(vio);
+    } else {
+      memcpy(&new_vio.remote, &vio->remote, vio->addrLen);
+      new_vio.addrLen = vio->addrLen;
     }
 #ifdef HAVE_KQUEUE
     else {
@@ -587,4 +592,65 @@ void get_vio_type_name(enum enum_vio_type vio_type, const char **str,
   }
   *str = vio_type_names[index].m_str;
   *len = vio_type_names[index].m_len;
+}
+
+void vio_dbug_info(Vio *vio, char *buf, size_t len) {
+  if (!vio) {
+    snprintf(buf, len, "vio nil");
+    return;
+  }
+
+  char vio_desc[VIO_DESCRIPTION_SIZE]{"n/a"};
+  vio_description(vio, vio_desc);
+
+  int fd = vio_fd(vio);
+
+  struct sockaddr_storage local_socket_addr;
+  socklen_t local_socket_addr_len = sizeof(local_socket_addr);
+  int r = getsockname(fd, reinterpret_cast<struct sockaddr *>(&local_socket_addr), &local_socket_addr_len);
+  if (r == -1) {
+    snprintf(buf, len, "%s ?? (getsockname failed: errno %d)", vio_desc, errno);
+    return;
+  }
+  char local_addr_buf[INET6_ADDRSTRLEN];
+  char local_port_buf[6];
+  r = getnameinfo(
+    reinterpret_cast<struct sockaddr *>(&local_socket_addr), local_socket_addr_len,
+    local_addr_buf, sizeof(local_addr_buf),
+    local_port_buf, sizeof(local_port_buf),
+    NI_NUMERICHOST | NI_NUMERICSERV
+  );
+  if (r == -1) {
+    snprintf(buf, len, "%s ?? (local getnameinfo failed: errno %d)", vio_desc, errno);
+    return;
+  }
+
+
+  char peer_addr_buf[INET6_ADDRSTRLEN];
+  char peer_port_buf[6];
+
+  if (vio->addrLen) {
+    struct sockaddr_storage peer_socket_addr;
+    memcpy(&peer_socket_addr, &vio->remote, sizeof(struct sockaddr_storage));
+    socklen_t peer_socket_addr_len = vio->addrLen;
+    r = getnameinfo(
+      reinterpret_cast<struct sockaddr *>(&peer_socket_addr), peer_socket_addr_len,
+      peer_addr_buf, sizeof(peer_addr_buf),
+      peer_port_buf, sizeof(peer_port_buf),
+      NI_NUMERICHOST | NI_NUMERICSERV
+    );
+    if (r == -1) {
+      snprintf(buf, len, "%s ?? (peer getnameinfo failed: errno %d)", vio_desc, errno);
+      return;
+    }
+  } else {
+    snprintf(peer_addr_buf, sizeof(peer_addr_buf), "??");
+    snprintf(peer_port_buf, sizeof(peer_port_buf), "??");
+  }
+
+  snprintf(
+    buf, len, "%s local(%s:%s) peer(%s:%s)",
+    vio_desc, local_addr_buf, local_port_buf, peer_addr_buf, peer_port_buf
+  );
+  return;
 }

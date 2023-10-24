@@ -212,6 +212,8 @@ int vio_getnameinfo(const struct sockaddr *sa, char *hostname,
                     size_t hostname_size, char *port, size_t port_size,
                     int flags);
 
+void vio_dbug_info(Vio *vio, char *buf, size_t len);
+
 extern "C" {
 #include <openssl/opensslv.h>
 }

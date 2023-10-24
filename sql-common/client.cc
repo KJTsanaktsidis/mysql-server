@@ -1192,10 +1192,10 @@ ulong cli_safe_read_with_ok_complete(MYSQL *mysql, bool parse_ok,
 
   if (len == packet_error || len == 0) {
 #ifndef NDEBUG
-    char desc[VIO_DESCRIPTION_SIZE]{"n/a"};
-    if (net->vio) vio_description(net->vio, desc);
+    char desc[256];
+    vio_dbug_info(net->vio, desc, sizeof(desc));
     DBUG_PRINT("zendbg",
-               ("cli_safe_read_with_ok_complete: Wrong connection or packet. fd: %s  len: %lu  socket_errno: %d", desc, len, socket_errno));
+               ("cli_safe_read_with_ok_complete: Wrong connection or packet. vio: %s  len: %lu  socket_errno: %d", desc, len, socket_errno));
 #endif  // NDEBUG
 #ifdef MYSQL_SERVER
     if (net->vio && (net->last_errno == ER_NET_READ_INTERRUPTED))
@@ -1375,7 +1375,9 @@ bool cli_advanced_command(MYSQL *mysql, enum enum_server_command command,
   */
   if ((command != COM_QUIT) && mysql->reconnect && !vio_is_connected(net->vio)) {
     net->error = NET_ERROR_SOCKET_UNUSABLE;
-    DBUG_PRINT("zendbg", ("marking socket as NET_ERROR_SOCKET_UNUSABLE becuase not vio_is_connected (socket_errno: %d)", socket_errno));
+    char socket_info[256];
+    vio_dbug_info(net->vio, socket_info, sizeof(socket_info));
+    DBUG_PRINT("zendbg", ("marking socket as NET_ERROR_SOCKET_UNUSABLE becuase not vio_is_connected (socket_errno: %d vio: %s)", socket_errno, socket_info));
   }
 
   if (net_write_command(net, (uchar)command, header, header_length, arg,

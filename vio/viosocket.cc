@@ -1081,6 +1081,9 @@ bool vio_socket_connect(Vio *vio, struct sockaddr *addr, socklen_t len,
   /* Only for socket-based transport types. */
   assert(vio->type == VIO_TYPE_SOCKET || vio->type == VIO_TYPE_TCPIP);
 
+  memcpy(&vio->remote, addr, len);
+  vio->addrLen = len;
+
   /* If timeout is not infinite, set socket to non-blocking mode. */
   if (((timeout > -1) || nonblocking) && vio_set_blocking(vio, false))
     return true;
