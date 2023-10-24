@@ -406,6 +406,27 @@ int vio_keepalive(Vio *vio, bool set_keep_alive) {
     if (set_keep_alive) opt = 1;
     r = mysql_socket_setsockopt(vio->mysql_socket, SOL_SOCKET, SO_KEEPALIVE,
                                 (char *)&opt, sizeof(opt));
+    if (r == -1) {
+      return r;
+    }
+
+    DBUG_EXECUTE_IF("set_keepalive_time", {
+      int r2 = 0;
+      opt = 60;
+      r2 = mysql_socket_setsockopt(vio->mysql_socket, IPPROTO_TCP, TCP_KEEPIDLE,
+                                  (char *)&opt, sizeof(opt));
+      if (r2 == -1) {
+        DBUG_PRINT("zendbg", ("failed to set TCP_KEEPIDLE: %d", errno));
+      }
+      opt = 30;
+      r2 = mysql_socket_setsockopt(vio->mysql_socket, IPPROTO_TCP, TCP_KEEPINTVL,
+                                  (char *)&opt, sizeof(opt));
+      if (r2 == -1) {
+        DBUG_PRINT("zendbg", ("failed to set TCP_KEEPINTVL: %d", errno));
+      }
+
+      DBUG_PRINT("zendbg", ("set TCP keepalive settings to 60/30"));
+    });
   }
   return r;
 }
