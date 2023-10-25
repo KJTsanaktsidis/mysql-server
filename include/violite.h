@@ -282,6 +282,8 @@ void vio_ssl_end();
 void ssl_start(void);
 void vio_end(void);
 
+void vio_ssl_keylog_callback(const SSL *ssl, const char *line);
+
 #if !defined(DONT_MAP_VIO)
 #define vio_delete(vio) (vio)->viodelete(vio)
 #define vio_errno(vio) (vio)->vioerrno(vio)

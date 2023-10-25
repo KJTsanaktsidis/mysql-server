@@ -640,6 +640,26 @@ static void print_ssl_session_id(SSL_SESSION *sess, const char *action) {
 }
 #endif  // !NDEBUG
 
+static int vio_ssl_ex_index;
+static char vio_ssl_ex_index_argp[]{"vio object"};
+__attribute__(( constructor )) static void vio_ssl_init_exdata() {
+  vio_ssl_ex_index = SSL_get_ex_new_index(0, vio_ssl_ex_index_argp, NULL, NULL, NULL);
+}
+
+void vio_ssl_keylog_callback(const SSL *ssl, const char *line) {
+  Vio *vio = reinterpret_cast<Vio *>(SSL_get_ex_data(ssl, vio_ssl_ex_index));
+  if (!vio) {
+    DBUG_PRINT("zendbg", ("vio_ssl_keylog_callback without vio: %s", line));
+    return;
+  }
+
+  char desc[256];
+  vio_dbug_info(vio, desc, sizeof(desc));
+
+  DBUG_PRINT("zendbg", ("vio: %s; SSL_KEYLOG: %s", desc, line));
+}
+
+
 static int ssl_do(struct st_VioSSLFd *ptr, Vio *vio, long timeout,
                   SSL_SESSION *ssl_session, ssl_handshake_func_t func,
                   unsigned long *ssl_errno_holder, SSL **sslptr) {
@@ -721,6 +741,7 @@ static int ssl_do(struct st_VioSSLFd *ptr, Vio *vio, long timeout,
     ssl = *sslptr;
   }
   ERR_clear_error();
+  SSL_set_ex_data(ssl, vio_ssl_ex_index, vio);
 
   size_t loop_ret;
   if ((loop_ret = ssl_handshake_loop(vio, ssl, func, ssl_errno_holder))) {

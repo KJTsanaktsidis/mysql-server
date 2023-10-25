@@ -640,6 +640,7 @@ static struct st_VioSSLFd *new_VioSSLFd(
 #endif /* OPENSSL_VERSION_NUMBER >= 0x10002000L */
 
   SSL_CTX_set_options(ssl_fd->ssl_context, ssl_ctx_options);
+  SSL_CTX_set_keylog_callback(ssl_fd->ssl_context, vio_ssl_keylog_callback);
 
   DBUG_PRINT("exit", ("OK 1"));
 
